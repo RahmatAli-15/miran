@@ -10,6 +10,20 @@ from .utils import incircle_from_triangle, point_near_line_distance
 # --------------------------
 UNIT_REGEX = re.compile(r"(\d+(?:\.\d+)?)\s*(cm|mm|m|inch|inches)", re.IGNORECASE)
 
+# --------------------------
+# Detect if user explicitly requests incircle
+# --------------------------
+INCIRCLE_KEYWORDS = [
+    "incircle", "in circle", "in-circle",
+    "inscribed circle", "incenter circle",
+    "circle tangent to all sides",
+    "draw the incircle", "add incircle"
+]
+
+def user_requested_incircle(query: str) -> bool:
+    q = query.lower()
+    return any(k in q for k in INCIRCLE_KEYWORDS)
+
 
 # --------------------------
 # Extract JSON from LLM
@@ -58,16 +72,13 @@ def parse_to_schema(raw_text: str, user_query: str = "") -> DrawingResponse:
     # 🔹 1. Detect units from user input → default = cm
     # ---------------------------------------------------
     matches = UNIT_REGEX.findall(user_query)
-    if matches:
-        unit = matches[0][1].lower()
-    else:
-        unit = "cm"
+    unit = matches[0][1].lower() if matches else "cm"
 
     parsed["meta"] = parsed.get("meta", {})
     parsed["meta"]["units"] = unit
 
     # ---------------------------------------------------
-    # 🔹 2. Add dimension metadata to shapes
+    # 🔹 2. Add dimension metadata
     # ---------------------------------------------------
     for shape in shapes:
         shape["unit"] = unit
@@ -79,17 +90,17 @@ def parse_to_schema(raw_text: str, user_query: str = "") -> DrawingResponse:
         if shape.get("type") == "rectangle":
             w = float(shape["width"])
             h = float(shape["height"])
-            shape["dimension"] = {
-                "width": round(w, 2),
-                "height": round(h, 2)
-            }
+            shape["dimension"] = {"width": round(w, 2), "height": round(h, 2)}
 
         if shape.get("type") == "triangle":
             pts = shape["points"]
-            def dist(p, q): return math.hypot(p[0] - q[0], p[1] - q[1])
+
+            def dist(a, b): return math.hypot(a[0] - b[0], a[1] - b[1])
+
             AB = dist(pts[0], pts[1])
             BC = dist(pts[1], pts[2])
             CA = dist(pts[2], pts[0])
+
             shape["dimension"] = {
                 "sides": {
                     "AB": round(AB, 2),
@@ -99,49 +110,36 @@ def parse_to_schema(raw_text: str, user_query: str = "") -> DrawingResponse:
             }
 
     # ---------------------------------------------------
-    # 🔹 3. Existing incircle correction (unchanged)
+    # 🔹 3. NEW — Only compute incircle if user asked
     # ---------------------------------------------------
-    triangle = None
-    circle = None
+    if not user_requested_incircle(user_query):
+        print("ℹ️ User did NOT request incircle → skipping auto-incircle")
+        print("FINAL PARSED JSON:", json.dumps(parsed, indent=2))
+        return DrawingResponse.parse_obj(parsed)
 
-    for s in shapes:
-        if s.get("type") == "triangle":
-            triangle = s
-        if s.get("type") == "circle":
-            circle = s
+    # ---- If user DID request incircle ----
+    print("✔️ User requested incircle → computing it...")
+
+    triangle = next((s for s in shapes if s.get("type") == "triangle"), None)
 
     if triangle:
-        pts = triangle.get("points")
-        pts_f = [[float(x), float(y)] for x, y in pts]
-
+        pts_f = [[float(x), float(y)] for x, y in triangle["points"]]
         inc_center, inc_r = incircle_from_triangle(pts_f)
 
-        need_replace = False
-        if circle is None:
-            need_replace = True
-        else:
-            try:
-                if not is_circle_tangent_to_triangle(circle, pts_f, eps=1e-2):
-                    need_replace = True
-            except:
-                need_replace = True
+        # Remove existing circle if any
+        shapes = [s for s in shapes if s.get("type") != "circle"]
 
-        if need_replace:
-            new_shapes = [s for s in shapes if s.get("type") != "circle"]
+        new_circle = {
+            "type": "circle",
+            "center": [inc_center[0], inc_center[1]],
+            "radius": inc_r,
+            "unit": unit,
+            "dimension": {"radius": round(float(inc_r), 2)}
+        }
 
-            new_circle = {
-                "type": "circle",
-                "center": [inc_center[0], inc_center[1]],
-                "radius": inc_r,
-                "unit": unit,
-                "dimension": {"radius": round(float(inc_r), 2)}
-            }
-
-            new_shapes.append(new_circle)
-            parsed["shapes"] = new_shapes
-
-            parsed["meta"]["server_computed_incircle"] = True
+        shapes.append(new_circle)
+        parsed["shapes"] = shapes
+        parsed["meta"]["server_computed_incircle"] = True
 
     print("FINAL PARSED JSON:", json.dumps(parsed, indent=2))
     return DrawingResponse.parse_obj(parsed)
-

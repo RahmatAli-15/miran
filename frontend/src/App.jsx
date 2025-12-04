@@ -39,21 +39,20 @@ async function handleSubmit(e) {
   const trimmedMain = mainQuery.trim();
   const trimmedUpdate = updateQuery.trim();
 
-  //  NEW VALIDATION: Main query is mandatory
   if (!trimmedMain) {
     setError("Main query cannot be empty. Please enter a drawing instruction.");
     return;
   }
 
-  // Combine queries
+  // Combine for backend (same logic)
   const combinedQuery = trimmedMain + " " + trimmedUpdate;
 
-  // Store history
+  // Save history
   if (queryHistory.length === 0) {
     setQueryHistory([trimmedMain]);
   }
   if (trimmedUpdate) {
-    setQueryHistory((prev) => [...prev, trimmedUpdate]);
+    setQueryHistory(prev => [...prev, trimmedUpdate]);
   }
 
   setLoading(true);
@@ -68,11 +67,15 @@ async function handleSubmit(e) {
     });
 
     const data = await res.json();
+
+    // ⬇️ NEW — show EXACT data received from backend
+    console.log("BACKEND RESPONSE:", data);
+
     if (!res.ok) throw new Error(data.detail || "Server error");
 
-    setHistory((prev) => [...prev, data]);
+    setHistory(prev => [...prev, data]);
     setFuture([]);
-    setDrawing(data);
+    setDrawing(data);   // ⬅️ ensures CanvasRenderer receives dimensions
 
     setUpdateQuery("");
   } catch (err) {

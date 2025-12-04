@@ -1,24 +1,20 @@
 import React, { useEffect, useState } from "react";
 
-/**
- * Premium Canvas Renderer (Enhanced for undo/redo + smooth transitions)
- * Supports:
- * triangle, polygon, line, circle, rectangle, ellipse
- */
+
 export default function CanvasRenderer({ drawing, width = 720, height = 480 }) {
   if (!drawing || !drawing.shapes) return null;
 
   const [renderKey, setRenderKey] = useState(0);
 
-  // 🔥 Trigger a fade-in animation whenever the drawing changes
   useEffect(() => {
-    setRenderKey(prev => prev + 1);
+    setRenderKey((prev) => prev + 1);
   }, [drawing]);
 
-  let xs = [], ys = [];
+  let xs = [],
+    ys = [];
 
   // Collect bounds
-  drawing.shapes.forEach(s => {
+  drawing.shapes.forEach((s) => {
     if (["triangle", "polygon", "line"].includes(s.type)) {
       s.points.forEach(([x, y]) => {
         xs.push(x);
@@ -58,8 +54,36 @@ export default function CanvasRenderer({ drawing, width = 720, height = 480 }) {
 
   const toSvg = ([x, y]) => [
     (x - minX) * scale + offsetX,
-    height - ((y - minY) * scale + offsetY)
+    height - ((y - minY) * scale + offsetY),
   ];
+
+  // ----------------------------------------------------
+  //  DIMENSION LINE DRAWER 
+  // ----------------------------------------------------
+  const renderDimension = (x1, y1, x2, y2, text) => (
+    <g>
+      <line
+        x1={x1}
+        y1={y1}
+        x2={x2}
+        y2={y2}
+        stroke="black"
+        strokeWidth={1}
+        markerStart="url(#arrow)"
+        markerEnd="url(#arrow)"
+      />
+
+      <text
+        x={(x1 + x2) / 2}
+        y={(y1 + y2) / 2 - 5}
+        fontSize="12"
+        fill="black"
+        textAnchor="middle"
+      >
+        {text}
+      </text>
+    </g>
+  );
 
   return (
     <svg
@@ -72,93 +96,187 @@ export default function CanvasRenderer({ drawing, width = 720, height = 480 }) {
         animate-[fadeIn_0.25s_ease-out]
       "
     >
-      {drawing.shapes.map((s, idx) => {
-        const uniqueKey = `${s.type}-${idx}-${renderKey}`;
+      {/* 🔹 Arrow marker for dimension lines */}
+      <defs>
+        <marker
+          id="arrow"
+          markerWidth="10"
+          markerHeight="10"
+          refX="4"
+          refY="3"
+          orient="auto"
+        >
+          <path d="M0,0 L0,6 L6,3 z" fill="black" />
+        </marker>
+      </defs>
 
-        // ---------- Triangle / Polygon ----------
+      {/* ---------------------------------------
+            SHAPES RENDERING (unchanged)
+      ---------------------------------------- */}
+      {drawing.shapes.map((s, idx) => {
+        const key = `${s.type}-${idx}-${renderKey}`;
+
         if (s.type === "triangle" || s.type === "polygon") {
-          const pts = s.points.map(p => toSvg(p).join(",")).join(" ");
+          const pts = s.points.map((p) => toSvg(p).join(",")).join(" ");
           return (
             <polygon
-              key={uniqueKey}
+              key={key}
               points={pts}
               fill="rgba(59,130,246,0.10)"
               stroke="rgba(59,130,246,1)"
               strokeWidth={2.2}
-              className="transition-all duration-300"
             />
           );
         }
 
-        // ---------- Line ----------
         if (s.type === "line") {
           const [a, b] = s.points.map(toSvg);
           return (
             <line
-              key={uniqueKey}
+              key={key}
               x1={a[0]}
               y1={a[1]}
               x2={b[0]}
               y2={b[1]}
-              stroke="rgba(0,0,0,0.85)"
-              strokeWidth={2.5}
-              strokeLinecap="round"
-              className="transition-all duration-300"
+              stroke="black"
+              strokeWidth={2}
             />
           );
         }
 
-        // ---------- Circle ----------
         if (s.type === "circle") {
           const [cx, cy] = toSvg(s.center);
           const r = s.radius * scale;
           return (
             <circle
-              key={uniqueKey}
+              key={key}
               cx={cx}
               cy={cy}
               r={r}
               fill="rgba(34,197,94,0.15)"
-              stroke="rgba(34,197,94,0.9)"
-              strokeWidth={2.4}
-              className="transition-all duration-300"
+              stroke="rgba(34,197,94,1)"
+              strokeWidth={2}
             />
           );
         }
 
-        // ---------- Rectangle ----------
         if (s.type === "rectangle") {
           const [tx, ty] = toSvg([s.x, s.y]);
           return (
             <rect
-              key={uniqueKey}
+              key={key}
               x={tx}
               y={ty - s.height * scale}
               width={s.width * scale}
               height={s.height * scale}
               fill="rgba(168,85,247,0.10)"
               stroke="rgba(168,85,247,1)"
-              strokeWidth={2.2}
-              className="transition-all duration-300"
+              strokeWidth={2}
             />
           );
         }
 
-        // ---------- Ellipse ----------
         if (s.type === "ellipse") {
           const [cx, cy] = toSvg(s.center);
           return (
             <ellipse
-              key={uniqueKey}
+              key={key}
               cx={cx}
               cy={cy}
               rx={s.rx * scale}
               ry={s.ry * scale}
               fill="rgba(239,68,68,0.12)"
               stroke="rgba(239,68,68,1)"
-              strokeWidth={2.3}
-              className="transition-all duration-300"
+              strokeWidth={2}
             />
+          );
+        }
+
+        return null;
+      })}
+
+      {/* ---------------------------------------
+            DIMENSION LINES (Simple Style)
+      ---------------------------------------- */}
+      {drawing.shapes.map((s, idx) => {
+        if (!s.dimension) return null;
+
+        const unit = s.unit || "cm";
+
+        // ---------------- Rectangle ----------------
+        if (s.type === "rectangle") {
+          const [tx, ty] = toSvg([s.x, s.y]);
+
+          const widthPx = s.width * scale;
+          const heightPx = s.height * scale;
+
+          // Width dimension under rectangle
+          const wLine = renderDimension(
+            tx,
+            ty + 20,
+            tx + widthPx,
+            ty + 20,
+            `${s.dimension.width} ${unit}`
+          );
+
+          // Height dimension left of rectangle
+          const hLine = renderDimension(
+            tx - 20,
+            ty,
+            tx - 20,
+            ty - heightPx,
+            `${s.dimension.height} ${unit}`
+          );
+
+          return (
+            <g key={`dim-${idx}`}>
+              {wLine}
+              {hLine}
+            </g>
+          );
+        }
+
+        // ---------------- Circle ----------------
+        if (s.type === "circle") {
+          const [cx, cy] = toSvg(s.center);
+          const r = s.radius * scale;
+
+          return (
+            <g key={`dim-${idx}`}>
+              {renderDimension(cx, cy, cx + r, cy, `${s.dimension.radius} ${unit}`)}
+            </g>
+          );
+        }
+
+        // ---------------- Triangle ----------------
+        if (s.type === "triangle") {
+          const pts = s.points.map(toSvg);
+          const { AB, BC, CA } = s.dimension.sides;
+
+          return (
+            <g key={`dim-${idx}`}>
+              {renderDimension(
+                pts[0][0],
+                pts[0][1],
+                pts[1][0],
+                pts[1][1],
+                `${AB} ${unit}`
+              )}
+              {renderDimension(
+                pts[1][0],
+                pts[1][1],
+                pts[2][0],
+                pts[2][1],
+                `${BC} ${unit}`
+              )}
+              {renderDimension(
+                pts[2][0],
+                pts[2][1],
+                pts[0][0],
+                pts[0][1],
+                `${CA} ${unit}`
+              )}
+            </g>
           );
         }
 

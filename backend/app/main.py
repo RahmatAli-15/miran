@@ -24,14 +24,14 @@ print("Groq KEY =", os.getenv("GROQ_API_KEY"))
 app = FastAPI(title="Miran World - Drawing JSON API")
 
 # -------------------------
-# CORS MIDDLEWARE (IMPORTANT)
+# CORS MIDDLEWARE
 # -------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],            # allow frontend on localhost:5173
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],            # must include OPTIONS for preflight
-    allow_headers=["*"],            # allow custom headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 class UserQuery(BaseModel):
@@ -46,7 +46,8 @@ async def user_query(payload: UserQuery):
         raise HTTPException(status_code=500, detail=f"LLM call failed: {e}")
 
     try:
-        drawing = parse_to_schema(raw)
+        # ✅ FIXED: pass user_input for unit detection + dimensions
+        drawing = parse_to_schema(raw, user_input)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse LLM output: {e}")
 

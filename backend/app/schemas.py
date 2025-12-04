@@ -1,37 +1,62 @@
 from pydantic import BaseModel
-from typing import List, Literal, Union, Tuple
+from typing import List, Literal, Union, Tuple, Optional
 
 Point = Tuple[float, float]
 
-class TriangleShape(BaseModel):
+
+
+class AllowExtras(BaseModel):
+    class Config:
+        extra = "allow"
+
+
+class TriangleShape(AllowExtras):
     type: Literal["triangle"]
     points: List[Point]
+    unit: Optional[str] = None
+    dimension: Optional[dict] = None
 
-class CircleShape(BaseModel):
+
+class CircleShape(AllowExtras):
     type: Literal["circle"]
     center: Point
     radius: float
+    unit: Optional[str] = None
+    dimension: Optional[dict] = None
 
-class RectangleShape(BaseModel):
+
+class RectangleShape(AllowExtras):
     type: Literal["rectangle"]
     x: float
     y: float
     width: float
     height: float
+    unit: Optional[str] = None
+    dimension: Optional[dict] = None
 
-class LineShape(BaseModel):
+
+class LineShape(AllowExtras):
     type: Literal["line"]
-    points: List[Point]  # must be 2 points
+    points: List[Point]
+    unit: Optional[str] = None
+    dimension: Optional[dict] = None
 
-class EllipseShape(BaseModel):
+
+class EllipseShape(AllowExtras):
     type: Literal["ellipse"]
     center: Point
     rx: float
     ry: float
+    unit: Optional[str] = None
+    dimension: Optional[dict] = None
 
-class PolygonShape(BaseModel):
+
+class PolygonShape(AllowExtras):
     type: Literal["polygon"]
     points: List[Point]
+    unit: Optional[str] = None
+    dimension: Optional[dict] = None
+
 
 Shape = Union[
     TriangleShape,
@@ -42,6 +67,10 @@ Shape = Union[
     PolygonShape,
 ]
 
+
 class DrawingResponse(BaseModel):
     shapes: List[Shape]
     meta: dict = {}
+
+    class Config:
+        extra = "allow"
